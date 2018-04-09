@@ -1,0 +1,16 @@
+*
+!include/
+!include/*
+!src/
+!config/
+!launch/
+!*.h
+!*.hpp
+!*.cpp
+!*.yaml
+!*.launch
+!README.*
+!Makefile
+!CMakeLists.txt
+!package.xml
+!.gitignore

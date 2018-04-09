@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+  <include file="$(find quince_arm_description)/launch/robot.launch" />
+
+  <node pkg="twist_jogger" type="twist_jogger_node" name="twist_jogger" output="screen" >
+    <rosparam command="load" file="$(find twist_jogger)/config/params.yaml" />
+  </node>
+</launch>

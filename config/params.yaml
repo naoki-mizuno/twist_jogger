@@ -1,0 +1,12 @@
+# Input
+twist_topic: cmd_delta
+joint_state_topic: quince_arm/joint_states
+# Output
+traj_topic: quince_arm/controller/command
+move_group_name: arm
+planning_frame_id: world
+publish_rate: 100
+trajectory_resolution: 0.2
+thresholds:
+  slow_down: 12
+  hard_stop: 20
