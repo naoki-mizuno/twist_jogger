@@ -256,11 +256,13 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
 
     auto new_delta = vel_xyzrpy;
     if (cond_num > threshold_cn_hard_stop_) {
-        ROS_WARN_STREAM("Close to singularity: stopping! " << cond_num);
+        ROS_WARN_STREAM_THROTTLE(2, "Approaching singularity: stopping! "
+                                    << cond_num);
         new_delta *= 0;
     }
     else if (cond_num > threshold_cn_slow_down_) {
-        ROS_WARN_STREAM("Close to singularity: slowing down! " << cond_num);
+        ROS_WARN_STREAM_THROTTLE(2, "Approaching singularity: slowing down! "
+                                    << cond_num);
         // TODO: Parameterize?
         new_delta *= 0.5;
     }
