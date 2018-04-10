@@ -132,7 +132,7 @@ private:
      * @return an equivalent JointTrajectory message
      */
     trajectory_msgs::JointTrajectoryPoint
-    js_to_jtp(const sensor_msgs::JointState& joints);
+    js_to_jtp(const sensor_msgs::JointState& joints, unsigned point_id);
 
     sensor_msgs::JointState
     get_next_joint_state(const sensor_msgs::JointState& curr,

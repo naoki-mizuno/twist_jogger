@@ -126,38 +126,49 @@ TwistJogger::twist_to_joint_worker() {
 
 trajectory_msgs::JointTrajectory
 TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
-    // Cartesian velocities
-    auto vel_xyzrpy = twist_to_vector6d(twist);
-    auto jacobian = kinematic_state_->getJacobian(joint_model_group_);
-    // Take singularity into account
-    vel_xyzrpy = adjust_velocity(jacobian, vel_xyzrpy);
-    // Angular velocities for each joint
-    auto omega = get_joint_omega(jacobian, vel_xyzrpy);
-    // Positions for each joint
-    auto delta_theta = omega * trajectory_resolution_;
-
-    // By now the joints_curr_ should have been updated in the callback
-    joints_curr_mutex_.lock();
-    joints_next_ = get_next_joint_state(joints_curr_, delta_theta, omega);
-    joints_curr_mutex_.unlock();
-    kinematic_state_->setVariableValues(joints_next_);
-
-    auto point = js_to_jtp(joints_next_);
     trajectory_msgs::JointTrajectory jt;
     jt.header.frame_id = planning_frame_id_;
+    joints_curr_mutex_.lock();
+    jt.joint_names = joints_curr_.name;
+    joints_curr_mutex_.unlock();
+
+    // Cartesian velocities
+    auto vel_xyzrpy = twist_to_vector6d(twist);
+
+    auto num_points = static_cast<unsigned>(
+        trajectory_duration_ / trajectory_resolution_
+    );
+    for (unsigned i = 0; i < num_points; i++) {
+        auto jacobian = kinematic_state_->getJacobian(joint_model_group_);
+        // Take singularity into account
+        vel_xyzrpy = adjust_velocity(jacobian, vel_xyzrpy);
+        // Angular velocities for each joint
+        auto omega = get_joint_omega(jacobian, vel_xyzrpy);
+        // Positions for each joint
+        auto delta_theta = omega * trajectory_resolution_;
+
+        // By now the joints_curr_ should have been updated in the callback
+        joints_curr_mutex_.lock();
+        joints_next_ = get_next_joint_state(joints_curr_, delta_theta, omega);
+        joints_curr_mutex_.unlock();
+        kinematic_state_->setVariableValues(joints_next_);
+
+        auto point = js_to_jtp(joints_next_, i + 1);
+        jt.points.push_back(point);
+    }
+
     jt.header.stamp = ros::Time::now();
-    jt.joint_names = joints_next_.name;
-    jt.points.push_back(point);
     return jt;
 }
 
 trajectory_msgs::JointTrajectoryPoint
-TwistJogger::js_to_jtp(const sensor_msgs::JointState& joints) {
+TwistJogger::js_to_jtp(const sensor_msgs::JointState& joints,
+                       const unsigned point_id) {
     trajectory_msgs::JointTrajectoryPoint point;
     point.positions = joints.position;
     point.velocities = joints.velocity;
     // point.effort = joints.effort;
-    point.time_from_start = ros::Duration{trajectory_resolution_};
+    point.time_from_start = ros::Duration{point_id * trajectory_resolution_};
 
     return point;
 }
