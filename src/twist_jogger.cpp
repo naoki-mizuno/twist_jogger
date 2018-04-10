@@ -145,7 +145,9 @@ TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
         // Angular velocities for each joint
         auto omega = get_joint_omega(jacobian, vel_xyzrpy);
         // Positions for each joint
-        auto delta_theta = omega * trajectory_resolution_;
+        auto delta_theta = omega;
+        // TODO: Why do we not need to multiply by time???
+        // auto delta_theta = omega * trajectory_resolution_;
 
         // By now the joints_curr_ should have been updated in the callback
         joints_curr_mutex_.lock();
@@ -226,6 +228,7 @@ TwistJogger::transform_twist(const geometry_msgs::TwistStamped& twist,
 
     const auto timeout = ros::Duration{0.2};
     try {
+        // TODO: Get common time and then transform
         tf_buffer_.transform(lin, new_lin, frame_id, timeout);
         tf_buffer_.transform(ang, new_ang, frame_id, timeout);
     }
