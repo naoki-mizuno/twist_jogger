@@ -157,7 +157,6 @@ TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
         jt.points.push_back(point);
     }
 
-    jt.header.stamp = ros::Time::now();
     return jt;
 }
 
