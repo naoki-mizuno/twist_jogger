@@ -2,6 +2,7 @@
 #define TWIST_JOGGER_H_
 
 #include <ros/ros.h>
+#include <tf2/exceptions.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
@@ -80,6 +81,8 @@ private:
 
     const robot_state::JointModelGroup* joint_model_group_;
 
+    robot_model_loader::RobotModelLoader model_loader_;
+
     /* Current joint state */
     std::mutex joints_curr_mutex_;
     sensor_msgs::JointState joints_curr_;
@@ -98,6 +101,8 @@ private:
      */
     std::string planning_frame_id_;
 
+    double stale_limit_;
+
     /**
      * How often to publish the JointTrajectory
      *
@@ -106,9 +111,14 @@ private:
     double publish_rate_;
 
     /**
-     * How far into the future the next trajectory point is
+     * How long the trajectory is, in seconds
+     */
+    double trajectory_duration_;
+
+    /**
+     * How fine-grained the trajectory is, in seconds
      *
-     * This value is used as the time_from_start field
+     * Used for the time_from_start field
      */
     double trajectory_resolution_;
 
@@ -126,8 +136,8 @@ private:
      * @param joints JointState message
      * @return an equivalent JointTrajectory message
      */
-    trajectory_msgs::JointTrajectory
-    js_to_jt(const sensor_msgs::JointState& joints);
+    trajectory_msgs::JointTrajectoryPoint
+    js_to_jtp(const sensor_msgs::JointState& joints, unsigned point_id);
 
     sensor_msgs::JointState
     get_next_joint_state(const sensor_msgs::JointState& curr,

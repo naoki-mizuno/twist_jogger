@@ -11,13 +11,16 @@ TwistJogger::TwistJogger()
     , move_group_{nullptr}
     , kinematic_state_{nullptr}
     , joint_model_group_{nullptr}
+    , model_loader_{"robot_description"}
     , joints_curr_mutex_{}
     , joints_curr_{}
     , joints_next_{}
     , latest_twist_mutex_{}
     , latest_twist_{}
     , planning_frame_id_{}
+    , stale_limit_{0}
     , publish_rate_{0}
+    , trajectory_duration_{0}
     , trajectory_resolution_{0}
     , threshold_cn_slow_down_{0}
     , threshold_cn_hard_stop_{0}
@@ -28,22 +31,21 @@ TwistJogger::TwistJogger()
     pnh_.param("joint_state_topic", js_topic, std::string{"joint_states"});
     pnh_.param("move_group_name", move_group_name, std::string{"move_group"});
     pnh_.param("planning_frame_id", planning_frame_id_, std::string{"world"});
+    pnh_.param("stale_limit", stale_limit_, 0.2);
     pnh_.param("publish_rate", publish_rate_, 100.0);
-    pnh_.param("trajectory_resolution", trajectory_resolution_, 0.2);
+    pnh_.param("trajectory/duration", trajectory_duration_, 0.5);
+    pnh_.param("trajectory/resolution", trajectory_resolution_, 0.1);
     pnh_.param("thresholds/slow_down", threshold_cn_slow_down_, 12.0);
     pnh_.param("thresholds/hard_stop", threshold_cn_hard_stop_, 20.0);
 
     move_group_ = std::make_shared<MoveGroupInterface>(move_group_name);
 
-    robot_model_loader::RobotModelLoader model_loader{"robot_description"};
-    auto arm_model = model_loader.getModel();
+    auto arm_model = model_loader_.getModel();
     kinematic_state_ = std::make_shared<robot_state::RobotState>(arm_model);
 
     joint_model_group_ = arm_model->getJointModelGroup(move_group_name);
 
-    ROS_INFO_STREAM("Listening to "
-                    << js_topic
-                    << " for JointState messages");
+    ROS_INFO_STREAM("Listening JointState on " << js_topic);
     ros::topic::waitForMessage<sensor_msgs::JointState>(js_topic);
     ROS_INFO_STREAM("Got JointState message!");
 
@@ -56,12 +58,6 @@ void
 TwistJogger::cb_twist(const geometry_msgs::TwistStamped& msg) {
     std::lock_guard<std::mutex> scoped_mutex{latest_twist_mutex_};
     latest_twist_ = msg;
-
-    // TODO: Remove?
-    if (is_zero_input(msg)) {
-        return;
-    }
-    pub_traj_.publish(get_joint_trajectory(msg));
 }
 
 void
@@ -93,8 +89,12 @@ TwistJogger::spin() {
     auto rate = ros::Rate{publish_rate_};
     while (ros::ok()) {
         rate.sleep();
+        ros::spinOnce();
 
-        // TODO: Add with stale limit
+        auto t = ros::Time::now() - latest_twist_.header.stamp;
+        if (t.toSec() > stale_limit_) {
+            continue;
+        }
 
         std::lock_guard<std::mutex> scoped_mutex{latest_jt_mutex_};
         pub_traj_.publish(latest_jt_);
@@ -126,40 +126,52 @@ TwistJogger::twist_to_joint_worker() {
 
 trajectory_msgs::JointTrajectory
 TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
+    trajectory_msgs::JointTrajectory jt;
+    jt.header.frame_id = planning_frame_id_;
+    joints_curr_mutex_.lock();
+    jt.joint_names = joints_curr_.name;
+    joints_curr_mutex_.unlock();
+
     // Cartesian velocities
     auto vel_xyzrpy = twist_to_vector6d(twist);
-    auto jacobian = kinematic_state_->getJacobian(joint_model_group_);
-    // Take singularity into account
-    vel_xyzrpy = adjust_velocity(jacobian, vel_xyzrpy);
-    // Angular velocities for each joint
-    auto omega = get_joint_omega(jacobian, vel_xyzrpy);
-    // Positions for each joint
-    auto delta_theta = omega * trajectory_resolution_;
 
-    // By now the joints_curr_ should have been updated in the callback
-    joints_curr_mutex_.lock();
-    joints_next_ = get_next_joint_state(joints_curr_, delta_theta, omega);
-    joints_curr_mutex_.unlock();
-    kinematic_state_->setVariableValues(joints_next_);
+    auto num_points = static_cast<unsigned>(
+        trajectory_duration_ / trajectory_resolution_
+    );
+    for (unsigned i = 0; i < num_points; i++) {
+        auto jacobian = kinematic_state_->getJacobian(joint_model_group_);
+        // Take singularity into account
+        vel_xyzrpy = adjust_velocity(jacobian, vel_xyzrpy);
+        // Angular velocities for each joint
+        auto omega = get_joint_omega(jacobian, vel_xyzrpy);
+        // Positions for each joint
+        auto delta_theta = omega;
+        // TODO: Why do we not need to multiply by time???
+        // auto delta_theta = omega * trajectory_resolution_;
 
-    return js_to_jt(joints_next_);
+        // By now the joints_curr_ should have been updated in the callback
+        joints_curr_mutex_.lock();
+        joints_next_ = get_next_joint_state(joints_curr_, delta_theta, omega);
+        joints_curr_mutex_.unlock();
+        kinematic_state_->setVariableValues(joints_next_);
+
+        auto point = js_to_jtp(joints_next_, i + 1);
+        jt.points.push_back(point);
+    }
+
+    return jt;
 }
 
-trajectory_msgs::JointTrajectory
-TwistJogger::js_to_jt(const sensor_msgs::JointState& joints) {
+trajectory_msgs::JointTrajectoryPoint
+TwistJogger::js_to_jtp(const sensor_msgs::JointState& joints,
+                       const unsigned point_id) {
     trajectory_msgs::JointTrajectoryPoint point;
     point.positions = joints.position;
     point.velocities = joints.velocity;
     // point.effort = joints.effort;
-    point.time_from_start = ros::Duration{trajectory_resolution_};
+    point.time_from_start = ros::Duration{point_id * trajectory_resolution_};
 
-    trajectory_msgs::JointTrajectory jt;
-    jt.header.frame_id = planning_frame_id_;
-    jt.header.stamp = ros::Time::now();
-    jt.joint_names = joints.name;
-    jt.points.push_back(point);
-
-    return jt;
+    return point;
 }
 
 sensor_msgs::JointState
@@ -211,12 +223,20 @@ TwistJogger::transform_twist(const geometry_msgs::TwistStamped& twist,
     ang.header = twist.header;
     ang.vector = twist.twist.angular;
 
-    const auto timeout = ros::Duration{0.2};
-    tf_buffer_.transform(lin, new_lin, frame_id, timeout);
-    tf_buffer_.transform(ang, new_ang, frame_id, timeout);
-
     auto new_twist = geometry_msgs::TwistStamped{};
     new_twist.header = new_lin.header;
+
+    const auto timeout = ros::Duration{0.2};
+    try {
+        // TODO: Get common time and then transform
+        tf_buffer_.transform(lin, new_lin, frame_id, timeout);
+        tf_buffer_.transform(ang, new_ang, frame_id, timeout);
+    }
+    catch (const tf2::ExtrapolationException& e) {
+        ROS_WARN_STREAM(e.what() << std::endl << "Returning zeros.");
+        return new_twist;
+    }
+
     new_twist.twist.linear = new_lin.vector;
     new_twist.twist.angular = new_ang.vector;
     return new_twist;
@@ -239,11 +259,15 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
 
     auto new_delta = vel_xyzrpy;
     if (cond_num > threshold_cn_hard_stop_) {
-        // TODO: Parameterize?
-        new_delta *= 0.7;
+        ROS_WARN_STREAM_THROTTLE(2, "Approaching singularity: stopping! "
+                                    << cond_num);
+        new_delta *= 0;
     }
     else if (cond_num > threshold_cn_slow_down_) {
-        new_delta *= 0.3;
+        ROS_WARN_STREAM_THROTTLE(2, "Approaching singularity: slowing down! "
+                                    << cond_num);
+        // TODO: Parameterize?
+        new_delta *= 0.5;
     }
     return vel_xyzrpy;
 }

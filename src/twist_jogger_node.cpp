@@ -7,8 +7,7 @@ main(int argc, char* argv[]) {
     ros::init(argc, argv, "twist_jogger_node");
 
     TwistJogger jogger;
-    //jogger.spin();
-    ros::spin();
+    jogger.spin();
 
     return 0;
 }
