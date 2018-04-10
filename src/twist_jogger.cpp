@@ -222,12 +222,19 @@ TwistJogger::transform_twist(const geometry_msgs::TwistStamped& twist,
     ang.header = twist.header;
     ang.vector = twist.twist.angular;
 
-    const auto timeout = ros::Duration{0.2};
-    tf_buffer_.transform(lin, new_lin, frame_id, timeout);
-    tf_buffer_.transform(ang, new_ang, frame_id, timeout);
-
     auto new_twist = geometry_msgs::TwistStamped{};
     new_twist.header = new_lin.header;
+
+    const auto timeout = ros::Duration{0.2};
+    try {
+        tf_buffer_.transform(lin, new_lin, frame_id, timeout);
+        tf_buffer_.transform(ang, new_ang, frame_id, timeout);
+    }
+    catch (const tf2::ExtrapolationException& e) {
+        ROS_WARN_STREAM(e.what() << std::endl << "Returning zeros.");
+        return new_twist;
+    }
+
     new_twist.twist.linear = new_lin.vector;
     new_twist.twist.angular = new_ang.vector;
     return new_twist;
