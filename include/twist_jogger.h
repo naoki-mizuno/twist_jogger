@@ -101,6 +101,8 @@ private:
      */
     std::string planning_frame_id_;
 
+    double stale_limit_;
+
     /**
      * How often to publish the JointTrajectory
      *

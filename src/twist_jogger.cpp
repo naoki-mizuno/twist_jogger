@@ -18,6 +18,7 @@ TwistJogger::TwistJogger()
     , latest_twist_mutex_{}
     , latest_twist_{}
     , planning_frame_id_{}
+    , stale_limit_{0}
     , publish_rate_{0}
     , trajectory_duration_{0}
     , trajectory_resolution_{0}
@@ -30,6 +31,7 @@ TwistJogger::TwistJogger()
     pnh_.param("joint_state_topic", js_topic, std::string{"joint_states"});
     pnh_.param("move_group_name", move_group_name, std::string{"move_group"});
     pnh_.param("planning_frame_id", planning_frame_id_, std::string{"world"});
+    pnh_.param("stale_limit", stale_limit_, 0.2);
     pnh_.param("publish_rate", publish_rate_, 100.0);
     pnh_.param("trajectory/duration", trajectory_duration_, 0.5);
     pnh_.param("trajectory/resolution", trajectory_resolution_, 0.1);
@@ -56,12 +58,6 @@ void
 TwistJogger::cb_twist(const geometry_msgs::TwistStamped& msg) {
     std::lock_guard<std::mutex> scoped_mutex{latest_twist_mutex_};
     latest_twist_ = msg;
-
-    // TODO: Remove?
-    if (is_zero_input(msg)) {
-        return;
-    }
-    pub_traj_.publish(get_joint_trajectory(msg));
 }
 
 void
@@ -93,8 +89,12 @@ TwistJogger::spin() {
     auto rate = ros::Rate{publish_rate_};
     while (ros::ok()) {
         rate.sleep();
+        ros::spinOnce();
 
-        // TODO: Add with stale limit
+        auto t = ros::Time::now() - latest_twist_.header.stamp;
+        if (t.toSec() > stale_limit_) {
+            continue;
+        }
 
         std::lock_guard<std::mutex> scoped_mutex{latest_jt_mutex_};
         pub_traj_.publish(latest_jt_);
