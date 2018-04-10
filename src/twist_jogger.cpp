@@ -215,8 +215,6 @@ TwistJogger::twist_to_vector6d(const geometry_msgs::TwistStamped& twist) {
 geometry_msgs::TwistStamped
 TwistJogger::transform_twist(const geometry_msgs::TwistStamped& twist,
                              const std::string& frame_id) {
-    // Note: Why there is no transformTwist in the TF API
-    // http://wiki.ros.org/tf/Reviews/2010-03-12_API_Review
     geometry_msgs::Vector3Stamped lin, ang, new_lin, new_ang;
     lin.header = twist.header;
     lin.vector = twist.twist.linear;
@@ -228,9 +226,18 @@ TwistJogger::transform_twist(const geometry_msgs::TwistStamped& twist,
 
     const auto timeout = ros::Duration{0.2};
     try {
-        // TODO: Get common time and then transform
-        tf_buffer_.transform(lin, new_lin, frame_id, timeout);
-        tf_buffer_.transform(ang, new_ang, frame_id, timeout);
+        tf_buffer_.transform(lin,
+                             new_lin,
+                             frame_id,
+                             ros::Time{0},
+                             lin.header.frame_id,
+                             timeout);
+        tf_buffer_.transform(ang,
+                             new_ang,
+                             frame_id,
+                             ros::Time{0},
+                             ang.header.frame_id,
+                             timeout);
     }
     catch (const tf2::ExtrapolationException& e) {
         ROS_WARN_STREAM(e.what() << std::endl << "Returning zeros.");
