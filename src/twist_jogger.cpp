@@ -18,6 +18,7 @@ TwistJogger::TwistJogger()
     , latest_twist_{}
     , planning_frame_id_{}
     , publish_rate_{0}
+    , trajectory_duration_{0}
     , trajectory_resolution_{0}
     , threshold_cn_slow_down_{0}
     , threshold_cn_hard_stop_{0}
@@ -29,7 +30,8 @@ TwistJogger::TwistJogger()
     pnh_.param("move_group_name", move_group_name, std::string{"move_group"});
     pnh_.param("planning_frame_id", planning_frame_id_, std::string{"world"});
     pnh_.param("publish_rate", publish_rate_, 100.0);
-    pnh_.param("trajectory_resolution", trajectory_resolution_, 0.2);
+    pnh_.param("trajectory/duration", trajectory_duration_, 0.5);
+    pnh_.param("trajectory/resolution", trajectory_resolution_, 0.1);
     pnh_.param("thresholds/slow_down", threshold_cn_slow_down_, 12.0);
     pnh_.param("thresholds/hard_stop", threshold_cn_hard_stop_, 20.0);
 
@@ -41,9 +43,7 @@ TwistJogger::TwistJogger()
 
     joint_model_group_ = arm_model->getJointModelGroup(move_group_name);
 
-    ROS_INFO_STREAM("Listening to "
-                    << js_topic
-                    << " for JointState messages");
+    ROS_INFO_STREAM("Listening JointState on " << js_topic);
     ros::topic::waitForMessage<sensor_msgs::JointState>(js_topic);
     ROS_INFO_STREAM("Got JointState message!");
 
@@ -142,24 +142,24 @@ TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
     joints_curr_mutex_.unlock();
     kinematic_state_->setVariableValues(joints_next_);
 
-    return js_to_jt(joints_next_);
+    auto point = js_to_jtp(joints_next_);
+    trajectory_msgs::JointTrajectory jt;
+    jt.header.frame_id = planning_frame_id_;
+    jt.header.stamp = ros::Time::now();
+    jt.joint_names = joints_next_.name;
+    jt.points.push_back(point);
+    return jt;
 }
 
-trajectory_msgs::JointTrajectory
-TwistJogger::js_to_jt(const sensor_msgs::JointState& joints) {
+trajectory_msgs::JointTrajectoryPoint
+TwistJogger::js_to_jtp(const sensor_msgs::JointState& joints) {
     trajectory_msgs::JointTrajectoryPoint point;
     point.positions = joints.position;
     point.velocities = joints.velocity;
     // point.effort = joints.effort;
     point.time_from_start = ros::Duration{trajectory_resolution_};
 
-    trajectory_msgs::JointTrajectory jt;
-    jt.header.frame_id = planning_frame_id_;
-    jt.header.stamp = ros::Time::now();
-    jt.joint_names = joints.name;
-    jt.points.push_back(point);
-
-    return jt;
+    return point;
 }
 
 sensor_msgs::JointState

@@ -106,9 +106,14 @@ private:
     double publish_rate_;
 
     /**
-     * How far into the future the next trajectory point is
+     * How long the trajectory is, in seconds
+     */
+    double trajectory_duration_;
+
+    /**
+     * How fine-grained the trajectory is, in seconds
      *
-     * This value is used as the time_from_start field
+     * Used for the time_from_start field
      */
     double trajectory_resolution_;
 
@@ -126,8 +131,8 @@ private:
      * @param joints JointState message
      * @return an equivalent JointTrajectory message
      */
-    trajectory_msgs::JointTrajectory
-    js_to_jt(const sensor_msgs::JointState& joints);
+    trajectory_msgs::JointTrajectoryPoint
+    js_to_jtp(const sensor_msgs::JointState& joints);
 
     sensor_msgs::JointState
     get_next_joint_state(const sensor_msgs::JointState& curr,
