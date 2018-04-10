@@ -257,11 +257,13 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
 
     auto new_delta = vel_xyzrpy;
     if (cond_num > threshold_cn_hard_stop_) {
-        // TODO: Parameterize?
-        new_delta *= 0.7;
+        ROS_WARN_STREAM("Close to singularity: stopping! " << cond_num);
+        new_delta *= 0;
     }
     else if (cond_num > threshold_cn_slow_down_) {
-        new_delta *= 0.3;
+        ROS_WARN_STREAM("Close to singularity: slowing down! " << cond_num);
+        // TODO: Parameterize?
+        new_delta *= 0.5;
     }
     return vel_xyzrpy;
 }
