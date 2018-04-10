@@ -81,6 +81,8 @@ private:
 
     const robot_state::JointModelGroup* joint_model_group_;
 
+    robot_model_loader::RobotModelLoader model_loader_;
+
     /* Current joint state */
     std::mutex joints_curr_mutex_;
     sensor_msgs::JointState joints_curr_;

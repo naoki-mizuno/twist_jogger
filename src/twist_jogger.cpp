@@ -11,6 +11,7 @@ TwistJogger::TwistJogger()
     , move_group_{nullptr}
     , kinematic_state_{nullptr}
     , joint_model_group_{nullptr}
+    , model_loader_{"robot_description"}
     , joints_curr_mutex_{}
     , joints_curr_{}
     , joints_next_{}
@@ -37,8 +38,7 @@ TwistJogger::TwistJogger()
 
     move_group_ = std::make_shared<MoveGroupInterface>(move_group_name);
 
-    robot_model_loader::RobotModelLoader model_loader{"robot_description"};
-    auto arm_model = model_loader.getModel();
+    auto arm_model = model_loader_.getModel();
     kinematic_state_ = std::make_shared<robot_state::RobotState>(arm_model);
 
     joint_model_group_ = arm_model->getJointModelGroup(move_group_name);
