@@ -276,7 +276,7 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
         // TODO: Parameterize?
         new_delta *= 0.5;
     }
-    return vel_xyzrpy;
+    return new_delta;
 }
 
 double
