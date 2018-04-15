@@ -144,6 +144,7 @@ TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
         vel_xyzrpy = adjust_velocity(jacobian, vel_xyzrpy);
         // Angular velocities for each joint
         auto omega = get_joint_omega(jacobian, vel_xyzrpy);
+        omega = adjust_angular_velocity(omega);
         // Positions for each joint
         auto delta_theta = omega;
         // TODO: Why do we not need to multiply by time???
@@ -277,6 +278,22 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
         new_delta *= 0.5;
     }
     return new_delta;
+}
+
+TwistJogger::Vector6d
+TwistJogger::adjust_angular_velocity(const TwistJogger::Vector6d &omega) {
+    auto new_omega = omega;
+    const auto& bounds = joint_model_group_->getActiveJointModelsBounds();
+    for (unsigned i = 0; i < bounds.size(); i++) {
+        // For seriaal links, bounds[i].size() == 1
+        auto vel_limit = bounds[i]->front().max_velocity_;
+        if (new_omega[i] > vel_limit) {
+            ROS_WARN_STREAM("Command exceeds velocity limit! Stopping.");
+            return TwistJogger::Vector6d{};
+        }
+    }
+
+    return new_omega;
 }
 
 double

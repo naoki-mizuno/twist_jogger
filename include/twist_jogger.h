@@ -202,6 +202,9 @@ private:
     adjust_velocity(const Eigen::MatrixXd& jacobian,
                     const Vector6d& vel_xyzrpy);
 
+    Vector6d
+    adjust_angular_velocity(const Vector6d& omega);
+
     /**
      * Calculates the condition number from the jacobian
      *
