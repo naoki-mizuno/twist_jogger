@@ -267,8 +267,8 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
 
     auto new_delta = vel_xyzrpy;
     if (cond_num > threshold_cn_hard_stop_) {
-        ROS_WARN_STREAM_THROTTLE(2, "Approaching singularity: stopping! "
-                                    << cond_num);
+        ROS_ERROR_STREAM_THROTTLE(2, "Approaching singularity: stopping! "
+                                     << cond_num);
         new_delta *= 0;
     }
     else if (cond_num > threshold_cn_slow_down_) {
