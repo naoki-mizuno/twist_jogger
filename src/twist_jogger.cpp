@@ -202,7 +202,7 @@ TwistJogger::Vector6d
 TwistJogger::twist_to_vector6d(const geometry_msgs::TwistStamped& twist) {
     auto transformed_twist = transform_twist(twist, planning_frame_id_);
 
-    Vector6d vec;
+    TwistJogger::Vector6d vec;
     vec[0] = transformed_twist.twist.linear.x;
     vec[1] = transformed_twist.twist.linear.y;
     vec[2] = transformed_twist.twist.linear.z;
