@@ -11,5 +11,7 @@ trajectory:
   duration: 0.1
   resolution: 0.1
 thresholds:
-  slow_down: 12
-  hard_stop: 20
+  # If 0, uses the maximum speed used by MoveIt!
+  max_speed: 0.3
+  slow_down: 5
+  hard_stop: 12

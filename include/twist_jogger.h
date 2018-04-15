@@ -122,6 +122,11 @@ private:
      */
     double trajectory_resolution_;
 
+    /**
+     * Maximum angular speed in rad/s
+     */
+    double threshold_max_speed_;
+
     double threshold_cn_slow_down_;
 
     double threshold_cn_hard_stop_;
@@ -202,8 +207,8 @@ private:
     adjust_velocity(const Eigen::MatrixXd& jacobian,
                     const Vector6d& vel_xyzrpy);
 
-    Vector6d
-    adjust_angular_velocity(const Vector6d& omega);
+    bool
+    is_below_speed_limit(const Vector6d &omega);
 
     /**
      * Calculates the condition number from the jacobian

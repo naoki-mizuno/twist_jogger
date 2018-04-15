@@ -35,6 +35,7 @@ TwistJogger::TwistJogger()
     pnh_.param("publish_rate", publish_rate_, 100.0);
     pnh_.param("trajectory/duration", trajectory_duration_, 0.5);
     pnh_.param("trajectory/resolution", trajectory_resolution_, 0.1);
+    pnh_.param("thresholds/max_speed", threshold_max_speed_, 0.0);
     pnh_.param("thresholds/slow_down", threshold_cn_slow_down_, 12.0);
     pnh_.param("thresholds/hard_stop", threshold_cn_hard_stop_, 20.0);
 
@@ -144,7 +145,9 @@ TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
         vel_xyzrpy = adjust_velocity(jacobian, vel_xyzrpy);
         // Angular velocities for each joint
         auto omega = get_joint_omega(jacobian, vel_xyzrpy);
-        omega = adjust_angular_velocity(omega);
+        if (!is_below_speed_limit(omega)) {
+            omega = TwistJogger::Vector6d{};
+        }
         // Positions for each joint
         auto delta_theta = omega;
         // TODO: Why do we not need to multiply by time???
@@ -280,20 +283,22 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
     return new_delta;
 }
 
-TwistJogger::Vector6d
-TwistJogger::adjust_angular_velocity(const TwistJogger::Vector6d &omega) {
-    auto new_omega = omega;
+bool
+TwistJogger::is_below_speed_limit(const TwistJogger::Vector6d& omega) {
     const auto& bounds = joint_model_group_->getActiveJointModelsBounds();
     for (unsigned i = 0; i < bounds.size(); i++) {
         // For serial links, bounds[i].size() == 1
         auto vel_limit = bounds[i]->front().max_velocity_;
-        if (new_omega[i] > vel_limit) {
+        if (threshold_max_speed_ != 0 && vel_limit > threshold_max_speed_) {
+            vel_limit = threshold_max_speed_;
+        }
+        if (omega[i] > vel_limit) {
             ROS_WARN_STREAM_THROTTLE(2, "Command exceeds velocity limit!");
-            return TwistJogger::Vector6d{};
+            return false;
         }
     }
 
-    return new_omega;
+    return true;
 }
 
 double
