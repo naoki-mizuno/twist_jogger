@@ -285,10 +285,10 @@ TwistJogger::adjust_angular_velocity(const TwistJogger::Vector6d &omega) {
     auto new_omega = omega;
     const auto& bounds = joint_model_group_->getActiveJointModelsBounds();
     for (unsigned i = 0; i < bounds.size(); i++) {
-        // For seriaal links, bounds[i].size() == 1
+        // For serial links, bounds[i].size() == 1
         auto vel_limit = bounds[i]->front().max_velocity_;
         if (new_omega[i] > vel_limit) {
-            ROS_WARN_STREAM("Command exceeds velocity limit! Stopping.");
+            ROS_WARN_STREAM_THROTTLE(2, "Command exceeds velocity limit!");
             return TwistJogger::Vector6d{};
         }
     }
