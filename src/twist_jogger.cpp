@@ -117,8 +117,9 @@ TwistJogger::twist_to_joint_worker() {
             continue;
         }
 
+        auto new_jt = get_joint_trajectory(latest_twist);
         latest_jt_mutex_.lock();
-        latest_jt_ = get_joint_trajectory(latest_twist);
+        latest_jt_ = std::move(new_jt);
         latest_jt_mutex_.unlock();
     }
 }
