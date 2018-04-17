@@ -54,12 +54,6 @@ public:
     void
     spin();
 
-    /**
-     * Keeps calculating the joint angles from the twist message
-     */
-    void
-    twist_to_joint_worker();
-
 private:
     ros::NodeHandle nh_;
 
@@ -93,7 +87,6 @@ private:
     std::mutex latest_twist_mutex_;
     geometry_msgs::TwistStamped latest_twist_;
 
-    std::mutex latest_jt_mutex_;
     trajectory_msgs::JointTrajectory latest_jt_;
 
     /**
@@ -102,6 +95,12 @@ private:
     std::string planning_frame_id_;
 
     double stale_limit_;
+
+    /**
+     * Tolerance of how much the estimated end effector position can diverge
+     * from the actual.
+     */
+    double js_divergence_;
 
     /**
      * How often to publish the JointTrajectory
@@ -222,6 +221,13 @@ private:
      */
     double
     get_condition_number(const Eigen::MatrixXd& jacobian);
+
+    /**
+     * Calculates from the JointState message the divergence between reality
+     * and calculation.
+     */
+    double
+    get_divergence(const sensor_msgs::JointState& msg);
 };
 
 #endif /* end of include guard */

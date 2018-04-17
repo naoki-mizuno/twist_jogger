@@ -19,6 +19,7 @@ TwistJogger::TwistJogger()
     , latest_twist_{}
     , planning_frame_id_{}
     , stale_limit_{0}
+    , js_divergence_{0}
     , publish_rate_{0}
     , trajectory_duration_{0}
     , trajectory_resolution_{0}
@@ -32,6 +33,7 @@ TwistJogger::TwistJogger()
     pnh_.param("move_group_name", move_group_name, std::string{"move_group"});
     pnh_.param("planning_frame_id", planning_frame_id_, std::string{"world"});
     pnh_.param("stale_limit", stale_limit_, 0.2);
+    pnh_.param("joint_state_divergence", js_divergence_, 0.05);
     pnh_.param("publish_rate", publish_rate_, 100.0);
     pnh_.param("trajectory/duration", trajectory_duration_, 0.5);
     pnh_.param("trajectory/resolution", trajectory_resolution_, 0.1);
@@ -63,6 +65,15 @@ TwistJogger::cb_twist(const geometry_msgs::TwistStamped& msg) {
 
 void
 TwistJogger::cb_js(const sensor_msgs::JointState& msg) {
+    auto divergence = get_divergence(msg);
+    ROS_DEBUG_STREAM("Divergence: " << divergence);
+    if (divergence < js_divergence_) {
+        return;
+    }
+    ROS_WARN_STREAM("Divergence detected between actual and calculated"
+                    " positions. Updating to actual joint state."
+                    " Divergence was " << divergence);
+
     sensor_msgs::JointState filtered_js;
     filtered_js.header = msg.header;
 
@@ -84,30 +95,10 @@ TwistJogger::cb_js(const sensor_msgs::JointState& msg) {
 
 void
 TwistJogger::spin() {
-    std::thread twist_to_joint(&TwistJogger::twist_to_joint_worker, this);
-    twist_to_joint.detach();
-
     auto rate = ros::Rate{publish_rate_};
     while (ros::ok()) {
         rate.sleep();
         ros::spinOnce();
-
-        auto t = ros::Time::now() - latest_twist_.header.stamp;
-        if (t.toSec() > stale_limit_) {
-            continue;
-        }
-
-        std::lock_guard<std::mutex> scoped_mutex{latest_jt_mutex_};
-        pub_traj_.publish(latest_jt_);
-    }
-}
-
-void
-TwistJogger::twist_to_joint_worker() {
-    // Spin really fast, but not too fast
-    auto rate = ros::Rate{1000};
-    while (ros::ok()) {
-        rate.sleep();
 
         latest_twist_mutex_.lock();
         auto latest_twist = geometry_msgs::TwistStamped{latest_twist_};
@@ -117,10 +108,13 @@ TwistJogger::twist_to_joint_worker() {
             continue;
         }
 
-        auto new_jt = get_joint_trajectory(latest_twist);
-        latest_jt_mutex_.lock();
-        latest_jt_ = std::move(new_jt);
-        latest_jt_mutex_.unlock();
+        auto t = ros::Time::now() - latest_twist_.header.stamp;
+        if (t.toSec() > stale_limit_) {
+            continue;
+        }
+
+        latest_jt_ = get_joint_trajectory(latest_twist);
+        pub_traj_.publish(latest_jt_);
     }
 }
 
@@ -150,13 +144,12 @@ TwistJogger::get_joint_trajectory(const geometry_msgs::TwistStamped& twist) {
             omega = TwistJogger::Vector6d{};
         }
         // Positions for each joint
-        auto delta_theta = omega;
-        // TODO: Why do we not need to multiply by time???
-        // auto delta_theta = omega * trajectory_resolution_;
+        auto delta_theta = omega * trajectory_resolution_;
 
         // By now the joints_curr_ should have been updated in the callback
         joints_curr_mutex_.lock();
         joints_next_ = get_next_joint_state(joints_curr_, delta_theta, omega);
+        joints_curr_ = joints_next_;
         joints_curr_mutex_.unlock();
         kinematic_state_->setVariableValues(joints_next_);
 
@@ -311,4 +304,26 @@ TwistJogger::get_condition_number(const Eigen::MatrixXd& jacobian) {
 
     double condition_number = max / min;
     return condition_number;
+}
+
+double
+TwistJogger::get_divergence(const sensor_msgs::JointState& msg) {
+    auto ee_link_name = move_group_->getEndEffectorLink();
+
+    // Calculated pose from commanded joint values
+    joints_curr_mutex_.lock();
+    kinematic_state_->setVariableValues(joints_curr_);
+    joints_curr_mutex_.unlock();
+    auto e = kinematic_state_->getGlobalLinkTransform(ee_link_name);
+
+    // Actual pose (obtained from the JointState message)
+    kinematic_state_->setVariableValues(msg);
+    auto c = kinematic_state_->getGlobalLinkTransform(ee_link_name);
+
+    auto dx = c.translation()[0] - e.translation()[0];
+    auto dy = c.translation()[1] - e.translation()[1];
+    auto dz = c.translation()[2] - e.translation()[2];
+    auto dist_diff = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    return dist_diff;
 }

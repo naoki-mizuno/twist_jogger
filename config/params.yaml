@@ -6,12 +6,15 @@ traj_topic: quince_arm/controller/command
 move_group_name: arm
 planning_frame_id: world
 stale_limit: 0.25
-publish_rate: 10
+# Divergence tolerance in meters
+joint_state_divergence: 0.1
+publish_rate: 5
 trajectory:
-  duration: 0.1
-  resolution: 0.1
+  duration: 0.2
+  resolution: 0.2
 thresholds:
   # If 0, uses the maximum speed used by MoveIt!
   max_speed: 0.3
-  slow_down: 5
-  hard_stop: 12
+  # Singularity condition numbers
+  slow_down: 10
+  hard_stop: 20
