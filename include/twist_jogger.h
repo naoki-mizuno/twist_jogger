@@ -78,6 +78,7 @@ private:
     robot_model_loader::RobotModelLoader model_loader_;
 
     /* Current joint state */
+    bool got_first_js_;
     std::mutex joints_curr_mutex_;
     sensor_msgs::JointState joints_curr_;
 

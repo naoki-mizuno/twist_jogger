@@ -12,6 +12,7 @@ TwistJogger::TwistJogger()
     , kinematic_state_{nullptr}
     , joint_model_group_{nullptr}
     , model_loader_{"robot_description"}
+    , got_first_js_{false}
     , joints_curr_mutex_{}
     , joints_curr_{}
     , joints_next_{}
@@ -67,6 +68,11 @@ TwistJogger::cb_twist(const geometry_msgs::TwistStamped& msg) {
 
 void
 TwistJogger::cb_js(const sensor_msgs::JointState& msg) {
+    if (!got_first_js_) {
+        std::lock_guard<std::mutex> scoped_mutex{joints_curr_mutex_};
+        joints_curr_ = msg;
+        got_first_js_ = true;
+    }
     auto divergence = get_divergence(msg);
     ROS_DEBUG_STREAM("Divergence: " << divergence);
     if (divergence < js_divergence_) {
