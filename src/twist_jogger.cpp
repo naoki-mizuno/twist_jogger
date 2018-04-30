@@ -38,8 +38,10 @@ TwistJogger::TwistJogger()
     pnh_.param("trajectory/duration", trajectory_duration_, 0.5);
     pnh_.param("trajectory/resolution", trajectory_resolution_, 0.1);
     pnh_.param("thresholds/max_speed", threshold_max_speed_, 0.0);
-    pnh_.param("thresholds/slow_down", threshold_cn_slow_down_, 12.0);
-    pnh_.param("thresholds/hard_stop", threshold_cn_hard_stop_, 20.0);
+    pnh_.param("singularity/slow_down/cn", threshold_cn_slow_down_, 12.0);
+    pnh_.param("singularity/hard_stop/cn", threshold_cn_hard_stop_, 20.0);
+    pnh_.param("singularity/slow_down/scale", slow_down_scale_, 0.3);
+    pnh_.param("singularity/hard_stop/scale", hard_stop_scale_, 0.0);
 
     move_group_ = std::make_shared<MoveGroupInterface>(move_group_name);
 
@@ -266,13 +268,12 @@ TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
     if (cond_num > threshold_cn_hard_stop_) {
         ROS_ERROR_STREAM_THROTTLE(2, "Approaching singularity: stopping! "
                                      << cond_num);
-        new_delta *= 0;
+        new_delta *= hard_stop_scale_;
     }
     else if (cond_num > threshold_cn_slow_down_) {
         ROS_WARN_STREAM_THROTTLE(2, "Approaching singularity: slowing down! "
                                     << cond_num);
-        // TODO: Parameterize?
-        new_delta *= 0.5;
+        new_delta *= slow_down_scale_;
     }
     return new_delta;
 }

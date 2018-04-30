@@ -127,8 +127,10 @@ private:
     double threshold_max_speed_;
 
     double threshold_cn_slow_down_;
+    double slow_down_scale_;
 
     double threshold_cn_hard_stop_;
+    double hard_stop_scale_;
 
     /* Private member methods */
 

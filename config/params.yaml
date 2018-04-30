@@ -15,6 +15,10 @@ trajectory:
 thresholds:
   # If 0, uses the maximum speed used by MoveIt!
   max_speed: 0.3
-  # Singularity condition numbers
-  slow_down: 10
-  hard_stop: 20
+singularity:
+  slow_down:
+    cn: 10
+    multiplier: 0.3
+  hard_stop:
+    cn: 20
+    multiplier: 0.1
