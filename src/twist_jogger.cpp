@@ -58,6 +58,7 @@ TwistJogger::TwistJogger()
     sub_twist_ = nh_.subscribe(in_topic, 1, &TwistJogger::cb_twist, this);
     sub_joint_state_ = nh_.subscribe(js_topic, 1, &TwistJogger::cb_js, this);
     pub_traj_ = nh_.advertise<trajectory_msgs::JointTrajectory>(out_topic, 1);
+    pub_cond_ = nh_.advertise<std_msgs::Float64>("condition_number", 1);
 }
 
 void
@@ -269,6 +270,10 @@ TwistJogger::Vector6d
 TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
                              const TwistJogger::Vector6d& vel_xyzrpy) {
     auto cond_num = get_condition_number(jacobian);
+
+    auto cn = std_msgs::Float64{};
+    cn.data = cond_num;
+    pub_cond_.publish(cn);
 
     auto new_delta = vel_xyzrpy;
     if (cond_num > threshold_cn_hard_stop_) {
