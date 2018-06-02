@@ -4,17 +4,17 @@ joint_state_topic: quince_arm/joint_states
 # Output
 traj_topic: quince_arm/controller/command
 move_group_name: arm
-planning_frame_id: world
+planning_frame_id: arm/base_link
 stale_limit: 0.25
 # Divergence tolerance in meters
 joint_state_divergence: 0.1
-publish_rate: 5
+publish_rate: 50
 trajectory:
-  duration: 0.2
-  resolution: 0.2
+  duration: 0.1
+  resolution: 0.1
 thresholds:
   # If 0, uses the maximum speed used by MoveIt!
-  max_speed: 0.3
+  max_speed: 0
 singularity:
   slow_down:
     cn: 10
