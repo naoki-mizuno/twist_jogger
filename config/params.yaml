@@ -18,7 +18,7 @@ thresholds:
 singularity:
   slow_down:
     cn: 10
-    scale: 0.3
+    scale: 0.2
   hard_stop:
-    cn: 20
+    cn: 100
     scale: 0.0
