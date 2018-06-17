@@ -76,18 +76,12 @@ TwistJogger::cb_js(const sensor_msgs::JointState& msg) {
     }
     auto divergence = get_divergence(msg);
     ROS_DEBUG_STREAM("Divergence: " << divergence);
-    auto stationary = is_stationary(msg);
-    if (!stationary) {
-        if (divergence < js_divergence_) {
-            return;
-        }
-
-        ROS_WARN_STREAM("Divergence detected between actual and calculated"
-                        " positions. Updating to actual joint state."
-                        " Divergence was " << divergence);
+    if (divergence < js_divergence_) {
+        return;
     }
-    ROS_DEBUG_STREAM_THROTTLE(5, "Joints at rest: Updating internal "
-                              "joint state to actual values");
+    ROS_WARN_STREAM("Divergence detected between actual and calculated"
+                    " positions. Updating to actual joint state."
+                    " Divergence was " << divergence);
 
     sensor_msgs::JointState filtered_js;
     filtered_js.header = msg.header;
@@ -270,12 +264,6 @@ TwistJogger::is_zero_input(const geometry_msgs::TwistStamped& twist) {
            && twist.twist.angular.x == 0
            && twist.twist.angular.y == 0
            && twist.twist.angular.z == 0;
-}
-
-bool
-TwistJogger::is_stationary(const sensor_msgs::JointState& msg) {
-    auto gt = boost::bind(std::equal_to<double>{}, _1, 0);
-    return std::all_of(msg.velocity.begin(), msg.velocity.end(), gt);
 }
 
 TwistJogger::Vector6d

@@ -202,15 +202,6 @@ private:
     is_zero_input(const geometry_msgs::TwistStamped& twist);
 
     /**
-     * Checks whether the joints are stationary in the given state
-     *
-     * @param JointState message to be examined
-     * @return true if all joints have very small velocity, false otherwise
-     */
-    bool
-    is_stationary(const sensor_msgs::JointState& msg);
-
-    /**
      * Adjust the velocity according to the condition number
      *
      * @param jacobian
