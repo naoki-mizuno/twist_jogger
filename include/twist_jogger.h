@@ -11,6 +11,7 @@
 #include <trajectory_msgs/JointTrajectory.h>
 #include <trajectory_msgs/JointTrajectoryPoint.h>
 #include <sensor_msgs/JointState.h>
+#include <std_srvs/Trigger.h>
 
 #include <Eigen/Eigenvalues>
 
@@ -49,6 +50,10 @@ public:
     void
     cb_js(const sensor_msgs::JointState& msg);
 
+    bool
+    cb_reset_js(std_srvs::TriggerRequest& req,
+                std_srvs::TriggerResponse& res);
+
     /**
      * Runs in a loop
      */
@@ -72,6 +77,11 @@ private:
 
     ros::Publisher pub_cond_;
 
+    /**
+     * Service to reset the internal JointState
+     */
+    ros::ServiceServer srv_reset_js_;
+
     std::shared_ptr<MoveGroupInterface> move_group_;
 
     std::shared_ptr<robot_state::RobotState> kinematic_state_;
@@ -80,7 +90,11 @@ private:
 
     robot_model_loader::RobotModelLoader model_loader_;
 
-    /* Current joint state */
+    /*
+     * Current internal joint state
+     * Note that this is the calculated value, and it could be different from
+     * the actual current joint state, which is stored in latest_joint_state_
+     */
     bool got_first_js_;
     std::mutex joints_curr_mutex_;
     sensor_msgs::JointState joints_curr_;
@@ -88,8 +102,11 @@ private:
     /* Joint state after increment */
     sensor_msgs::JointState joints_next_;
 
+    /* Latest raw values received from via topic */
     std::mutex latest_twist_mutex_;
     geometry_msgs::TwistStamped latest_twist_;
+
+    sensor_msgs::JointState latest_joint_state_;
 
     trajectory_msgs::JointTrajectory latest_jt_;
 
@@ -234,6 +251,12 @@ private:
      */
     double
     get_divergence(const sensor_msgs::JointState& msg);
+
+    /**
+     * Resets the internal JointState to the given message
+     */
+    void
+    reset_joint_state(const sensor_msgs::JointState& msg);
 };
 
 #endif /* end of include guard */
