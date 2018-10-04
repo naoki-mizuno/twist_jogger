@@ -111,6 +111,7 @@ TwistJogger::spin() {
         latest_twist_mutex_.unlock();
 
         if (is_zero_input(latest_twist)) {
+            reset_joint_state(latest_joint_state_);
             continue;
         }
 
