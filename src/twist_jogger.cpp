@@ -59,6 +59,9 @@ TwistJogger::TwistJogger()
     sub_joint_state_ = nh_.subscribe(js_topic, 1, &TwistJogger::cb_js, this);
     pub_traj_ = nh_.advertise<trajectory_msgs::JointTrajectory>(out_topic, 1);
     pub_cond_ = nh_.advertise<std_msgs::Float64>("condition_number", 1);
+    srv_reset_js_ = nh_.advertiseService("reset_joint_state",
+                                         &TwistJogger::cb_reset_js,
+                                         this);
 }
 
 void
@@ -69,6 +72,8 @@ TwistJogger::cb_twist(const geometry_msgs::TwistStamped& msg) {
 
 void
 TwistJogger::cb_js(const sensor_msgs::JointState& msg) {
+    latest_joint_state_ = msg;
+
     if (!got_first_js_) {
         std::lock_guard<std::mutex> scoped_mutex{joints_curr_mutex_};
         joints_curr_ = msg;
@@ -76,36 +81,22 @@ TwistJogger::cb_js(const sensor_msgs::JointState& msg) {
     }
     auto divergence = get_divergence(msg);
     ROS_DEBUG_STREAM("Divergence: " << divergence);
-    auto stationary = is_stationary(msg);
-    if (!stationary) {
-        if (divergence < js_divergence_) {
-            return;
-        }
-
+    if (divergence >= js_divergence_) {
         ROS_WARN_STREAM("Divergence detected between actual and calculated"
                         " positions. Updating to actual joint state."
                         " Divergence was " << divergence);
-    }
-    ROS_DEBUG_STREAM_THROTTLE(5, "Joints at rest: Updating internal "
-                              "joint state to actual values");
 
-    sensor_msgs::JointState filtered_js;
-    filtered_js.header = msg.header;
-
-    for (const auto& name : joint_model_group_->getJointModelNames()) {
-        auto it = std::find(msg.name.begin(), msg.name.end(), name);
-        if (it == msg.name.end()) {
-            // Joint doesn't belong to move_group
-            continue;
-        }
-        auto idx = std::distance(msg.name.begin(), it);
-        filtered_js.name.push_back(msg.name[idx]);
-        filtered_js.position.push_back(msg.position[idx]);
-        filtered_js.velocity.push_back(msg.velocity[idx]);
-        filtered_js.effort.push_back(msg.effort[idx]);
+        reset_joint_state(msg);
     }
-    std::lock_guard<std::mutex> scoped_mutex{joints_curr_mutex_};
-    joints_curr_ = std::move(filtered_js);
+}
+
+bool
+TwistJogger::cb_reset_js(std_srvs::TriggerRequest& req,
+                         std_srvs::TriggerResponse& res) {
+    reset_joint_state(latest_joint_state_);
+    res.success = true;
+    res.message = "Reset internal joint state";
+    return true;
 }
 
 void
@@ -120,6 +111,7 @@ TwistJogger::spin() {
         latest_twist_mutex_.unlock();
 
         if (is_zero_input(latest_twist)) {
+            reset_joint_state(latest_joint_state_);
             continue;
         }
 
@@ -272,12 +264,6 @@ TwistJogger::is_zero_input(const geometry_msgs::TwistStamped& twist) {
            && twist.twist.angular.z == 0;
 }
 
-bool
-TwistJogger::is_stationary(const sensor_msgs::JointState& msg) {
-    auto gt = boost::bind(std::equal_to<double>{}, _1, 0);
-    return std::all_of(msg.velocity.begin(), msg.velocity.end(), gt);
-}
-
 TwistJogger::Vector6d
 TwistJogger::adjust_velocity(const Eigen::MatrixXd& jacobian,
                              const TwistJogger::Vector6d& vel_xyzrpy) {
@@ -350,4 +336,25 @@ TwistJogger::get_divergence(const sensor_msgs::JointState& msg) {
     auto dist_diff = std::sqrt(dx * dx + dy * dy + dz * dz);
 
     return dist_diff;
+}
+
+void
+TwistJogger::reset_joint_state(const sensor_msgs::JointState& msg) {
+    sensor_msgs::JointState filtered_js;
+    filtered_js.header = msg.header;
+
+    for (const auto& name : joint_model_group_->getJointModelNames()) {
+        auto it = std::find(msg.name.begin(), msg.name.end(), name);
+        if (it == msg.name.end()) {
+            // Joint doesn't belong to move_group
+            continue;
+        }
+        auto idx = std::distance(msg.name.begin(), it);
+        filtered_js.name.push_back(msg.name[idx]);
+        filtered_js.position.push_back(msg.position[idx]);
+        filtered_js.velocity.push_back(msg.velocity[idx]);
+        filtered_js.effort.push_back(msg.effort[idx]);
+    }
+    std::lock_guard<std::mutex> scoped_mutex{joints_curr_mutex_};
+    joints_curr_ = std::move(filtered_js);
 }
