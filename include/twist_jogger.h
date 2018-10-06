@@ -157,10 +157,6 @@ private:
     sensor_msgs::JointState
     get_next_joint_state(const geometry_msgs::TwistStamped& twist);
 
-    geometry_msgs::TwistStamped
-    transform_twist(const geometry_msgs::TwistStamped& twist,
-                    const std::string& frame_id);
-
     /**
      * Checks whether the input twist message is all-zero
      *

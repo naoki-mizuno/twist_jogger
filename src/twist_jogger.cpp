@@ -207,23 +207,18 @@ geometry_msgs::PoseStamped
 TwistJogger::get_target_pose(const geometry_msgs::PoseStamped& curr_pose,
                              const geometry_msgs::TwistStamped& twist,
                              const double dt) {
-    if (twist.header.frame_id != curr_pose.header.frame_id) {
-        // Should not happen; compute_fk has probably done something wrong
-        ROS_WARN_STREAM("Frame ID of twist and current pose does not match");
-    }
-
     auto tgt_pose = curr_pose;
-    auto tgt_frame_twist = transform_twist(twist, tgt_pose.header.frame_id);
+    tf_buffer_.transform(tgt_pose, tgt_pose, twist.header.frame_id);
 
     // Apply translation
-    tgt_pose.pose.position.x += dt * tgt_frame_twist.twist.linear.x;
-    tgt_pose.pose.position.y += dt * tgt_frame_twist.twist.linear.y;
-    tgt_pose.pose.position.z += dt * tgt_frame_twist.twist.linear.z;
+    tgt_pose.pose.position.x += dt * twist.twist.linear.x;
+    tgt_pose.pose.position.y += dt * twist.twist.linear.y;
+    tgt_pose.pose.position.z += dt * twist.twist.linear.z;
 
     // Apply rotation
-    const double dx = dt * tgt_frame_twist.twist.angular.x;
-    const double dy = dt * tgt_frame_twist.twist.angular.y;
-    const double dz = dt * tgt_frame_twist.twist.angular.z;
+    const double dx = dt * twist.twist.angular.x;
+    const double dy = dt * twist.twist.angular.y;
+    const double dz = dt * twist.twist.angular.z;
     double angle = std::sqrt(dx * dx + dy * dy + dz * dz);
     auto axis = tf2::Vector3{0, 0, 1};
     if (angle < DBL_EPSILON) {
@@ -240,48 +235,10 @@ TwistJogger::get_target_pose(const geometry_msgs::PoseStamped& curr_pose,
     q_tgt = q_twist * q_curr;
     tf2::convert(q_tgt, tgt_pose.pose.orientation);
 
+    // Back to curr_pose frame
+    tf_buffer_.transform(tgt_pose, tgt_pose, curr_pose.header.frame_id);
+
     return tgt_pose;
-}
-
-geometry_msgs::TwistStamped
-TwistJogger::transform_twist(const geometry_msgs::TwistStamped& twist,
-                             const std::string& frame_id) {
-    if (twist.header.frame_id == frame_id) {
-        return twist;
-    }
-
-    geometry_msgs::Vector3Stamped lin, ang, new_lin, new_ang;
-    lin.header = twist.header;
-    lin.vector = twist.twist.linear;
-    ang.header = twist.header;
-    ang.vector = twist.twist.angular;
-
-    auto new_twist = geometry_msgs::TwistStamped{};
-    new_twist.header = new_lin.header;
-
-    const auto timeout = ros::Duration{0.2};
-    try {
-        tf_buffer_.transform(lin,
-                             new_lin,
-                             frame_id,
-                             ros::Time{0},
-                             lin.header.frame_id,
-                             timeout);
-        tf_buffer_.transform(ang,
-                             new_ang,
-                             frame_id,
-                             ros::Time{0},
-                             ang.header.frame_id,
-                             timeout);
-    }
-    catch (const tf2::ExtrapolationException& e) {
-        ROS_WARN_STREAM(e.what() << std::endl << "Returning zeros.");
-        return new_twist;
-    }
-
-    new_twist.twist.linear = new_lin.vector;
-    new_twist.twist.angular = new_ang.vector;
-    return new_twist;
 }
 
 bool
