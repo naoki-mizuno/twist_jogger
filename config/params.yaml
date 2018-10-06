@@ -1,9 +1,9 @@
 topic:
   # Input
   twist: cmd_delta
-  joint_state: quince_arm/joint_states
+  joint_state: doppel/joint_states
   # Output
-  trajectory: quince_arm/controller/command
+  trajectory: doppel/controller/command
 move_group_name: arm
 base_frame_id: arm/base_link
 ee_link_name: arm/hand_camera
