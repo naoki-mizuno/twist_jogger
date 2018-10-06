@@ -1,24 +1,23 @@
-# Input
-twist_topic: cmd_delta
-joint_state_topic: quince_arm/joint_states
-# Output
-traj_topic: quince_arm/controller/command
+topic:
+  # Input
+  twist: cmd_delta
+  joint_state: quince_arm/joint_states
+  # Output
+  trajectory: quince_arm/controller/command
 move_group_name: arm
-planning_frame_id: arm/base_link
-stale_limit: 0.25
-# Divergence tolerance in meters
-joint_state_divergence: 0.1
+base_frame_id: arm/base_link
+ee_link_name: arm/hand_camera
+# Discard velocity field in JointState
+discard_velocity: true
+# Discard effort field in JointState
+discard_effort: true
+timeout:
+  fresh_twist: 0.25
+  # When to update to actual joint values
+  internal_joint_state: 3
 publish_rate: 50
-trajectory:
-  duration: 0.1
-  resolution: 0.1
-thresholds:
-  # If 0, uses the maximum speed used by MoveIt!
-  max_speed: 0
-singularity:
-  slow_down:
-    cn: 10
-    scale: 0.2
-  hard_stop:
-    cn: 100
-    scale: 0.0
+trajectory_duration: 0.1
+# Set to 0 to disable checking
+joint_limits:
+  speed: 1.0
+  angle_change: 0.5

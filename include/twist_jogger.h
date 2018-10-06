@@ -20,6 +20,8 @@
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
+#include <moveit_msgs/GetPositionFK.h>
+#include <moveit_msgs/GetPositionIK.h>
 
 #include <mutex>
 #include <string>
@@ -50,13 +52,6 @@ public:
     void
     cb_js(const sensor_msgs::JointState& msg);
 
-    bool
-    cb_reset_js(std_srvs::TriggerRequest& req,
-                std_srvs::TriggerResponse& res);
-
-    /**
-     * Runs in a loop
-     */
     void
     spin();
 
@@ -75,12 +70,9 @@ private:
 
     ros::Publisher pub_traj_;
 
-    ros::Publisher pub_cond_;
+    ros::ServiceClient srv_fk_;
 
-    /**
-     * Service to reset the internal JointState
-     */
-    ros::ServiceServer srv_reset_js_;
+    ros::ServiceClient srv_ik_;
 
     std::shared_ptr<MoveGroupInterface> move_group_;
 
@@ -91,16 +83,24 @@ private:
     robot_model_loader::RobotModelLoader model_loader_;
 
     /*
-     * Current internal joint state
-     * Note that this is the calculated value, and it could be different from
-     * the actual current joint state, which is stored in latest_joint_state_
-     */
-    bool got_first_js_;
+     * Current internal joint states
+     * The reason why we treat the calculated (internal) joint state and the
+     * actual joint values differently is because the actual joint values
+     * fluctuate quite often. This makes it difficult when calculating the
+     * next pose of the end-effector. It's better to assume that the
+     * commanded joint values are perfectly executed, and base our next
+     * end-effector pose calculation off of that assumption.
+     *
+     * However, we need to update to the actual joint values once in a while,
+     * and that's done after internal_timeout_ seconds.
+     *
+     * The reason why we wait for a while before updating to the actual joint
+     * values is because when repeating short intervals of jogging and
+     * pausing, we saw some drifting of the end-effector due to the
+     * fluctuation mentioned above.
+    */
     std::mutex joints_curr_mutex_;
     sensor_msgs::JointState joints_curr_;
-
-    /* Joint state after increment */
-    sensor_msgs::JointState joints_next_;
 
     /* Latest raw values received from via topic */
     std::mutex latest_twist_mutex_;
@@ -108,102 +108,54 @@ private:
 
     sensor_msgs::JointState latest_joint_state_;
 
-    trajectory_msgs::JointTrajectory latest_jt_;
+    std::string move_group_name_;
 
     /**
      * frame_id to be used for the output JointTrajectory message
      */
-    std::string planning_frame_id_;
-
-    double stale_limit_;
+    std::string base_frame_id_;
 
     /**
-     * Tolerance of how much the estimated end effector position can diverge
-     * from the actual.
+     * Name of the end-effector (the link to move)
      */
-    double js_divergence_;
+    std::string ee_link_name_;
 
     /**
      * How often to publish the JointTrajectory
      *
-     * Does not publish when the received twist is all zeros.
+     * Note: Does not publish when the received twist is all zeros.
      */
     double publish_rate_;
 
     /**
-     * How long the trajectory is, in seconds
+     * How long the commanded one-point trajectory is (seconds)
      */
     double trajectory_duration_;
 
     /**
-     * How fine-grained the trajectory is, in seconds
-     *
-     * Used for the time_from_start field
+     * Limit movement of joints (rad and rad/s, respectively)
      */
-    double trajectory_resolution_;
+    double max_ang_change_;
+    double max_speed_;
 
     /**
-     * Maximum angular speed in rad/s
+     * Discard certain fields from JointState messages
      */
-    double threshold_max_speed_;
+    bool discard_velocity_;
+    bool discard_effort_;
 
-    double threshold_cn_slow_down_;
-    double slow_down_scale_;
+    double fresh_twist_timeout_;
 
-    double threshold_cn_hard_stop_;
-    double hard_stop_scale_;
+    /**
+     * After this many seconds, discard the internal joint state and update
+     * to the actual joint values.
+     */
+    double internal_timeout_;
 
     /* Private member methods */
 
-    trajectory_msgs::JointTrajectory
-    get_joint_trajectory(const geometry_msgs::TwistStamped& twist);
-
-    /**
-     * Converts a JointState message to JointTrajectory
-     * @param joints JointState message
-     * @return an equivalent JointTrajectory message
-     */
-    trajectory_msgs::JointTrajectoryPoint
-    js_to_jtp(const sensor_msgs::JointState& joints, unsigned point_id);
-
     sensor_msgs::JointState
-    get_next_joint_state(const sensor_msgs::JointState& curr,
-                         const Eigen::VectorXd& delta_theta,
-                         const Eigen::VectorXd& omega);
-
-    /**
-     *
-     * @param jacobian
-     * @param vel_xyzrpy the velocity in xyzrpy
-     * @return angular velocities of each joint
-     */
-    Eigen::VectorXd
-    get_joint_omega(const Eigen::MatrixXd& jacobian,
-                    const Vector6d& vel_xyzrpy);
-
-    /**
-     * @param jacobian
-     * @return the pseudo-inverse matrix of the jacobian
-     */
-    Eigen::MatrixXd
-    get_pseudo_inverse(const Eigen::MatrixXd& jacobian);
-
-    /**
-     * Converts a TwistStamped message to a Vector6d
-     *
-     * The vector's elements are in the following order:
-     * 1. x
-     * 2. y
-     * 3. z
-     * 4. roll
-     * 5. pitch
-     * 6. yaw
-     *
-     * @param twist
-     * @return a Vector6d with the x, y, z, roll, pitch, yaw
-     */
-    Vector6d
-    twist_to_vector6d(const geometry_msgs::TwistStamped& twist);
+    get_next_joint_state(const geometry_msgs::TwistStamped& twist);
 
     geometry_msgs::TwistStamped
     transform_twist(const geometry_msgs::TwistStamped& twist,
@@ -218,45 +170,68 @@ private:
     bool
     is_zero_input(const geometry_msgs::TwistStamped& twist);
 
-    /**
-     * Adjust the velocity according to the condition number
-     *
-     * @param jacobian
-     * @param vel_xyzrpy
-     * @return the new cartesian velocities
-     */
-    Vector6d
-    adjust_velocity(const Eigen::MatrixXd& jacobian,
-                    const Vector6d& vel_xyzrpy);
-
     bool
-    is_below_speed_limit(const Vector6d &omega);
-
+    is_below_joint_limits(const sensor_msgs::JointState &s1,
+                          const sensor_msgs::JointState &s2);
     /**
-     * Calculates the condition number from the jacobian
+     * Calculates the current pose of the end-effector from the
+     * joint state
      *
-     * The condition number indicates how close the current configuration
-     * is to singularity. The higher the number, the closer it is to
-     * singularity.
+     * This is done using the /compute_fk service.
      *
-     * @param jacobian
-     * @return
+     * @param joints the current joint state of the robot
+     * @param tgt_frame_id the frame of the end-effector
+     * @return the pose of the end-effector in the cartesian coordinate
      */
-    double
-    get_condition_number(const Eigen::MatrixXd& jacobian);
+    std::tuple<geometry_msgs::PoseStamped, bool>
+    compute_fk(const sensor_msgs::JointState& joints,
+               const std::string& fixed_frame_id,
+               const std::string& tgt_frame_id);
 
     /**
-     * Calculates from the JointState message the divergence between reality
-     * and calculation.
+     * Computes the inverse kinematics of a given pose
+     *
+     * @param pose the pose of the end-effector
+     * @return the robot's joint state that achieves the given pose
      */
-    double
-    get_divergence(const sensor_msgs::JointState& msg);
+    std::tuple<sensor_msgs::JointState, bool>
+    compute_ik(const geometry_msgs::PoseStamped& pose,
+                   const sensor_msgs::JointState& joints_curr,
+                   const std::string& tgt_frame_id);
 
     /**
-     * Resets the internal JointState to the given message
+     * Calculates the next pose of the end-effector
+     *
+     * The amount of movement is controlled by the given twist message and
+     * also the dt value.
+     *
+     * @param curr_pose the current pose of the end-effector
+     * @param twist the velocity command
+     * @param dt the duration of movement
+     */
+    geometry_msgs::PoseStamped
+    get_target_pose(const geometry_msgs::PoseStamped& curr_pose,
+                    const geometry_msgs::TwistStamped& twist,
+                    const double dt);
+
+    /**
+     * Resets the internal JointState to the given JointState message
      */
     void
-    reset_joint_state(const sensor_msgs::JointState& msg);
+    reset_to_actual_js(const sensor_msgs::JointState& msg);
+
+    /**
+     * Filters out the irrelevant joints from the JointState message
+     *
+     * discard_velocity and discard_effort ROS parameters control whether to
+     * also discard the velocity and effort fields, respectively.
+     *
+     * Any joint that's not in the move_group will be discarded
+     * @param msg
+     * @return the filtered JointState message
+     */
+    sensor_msgs::JointState
+    filter_joint_state(const sensor_msgs::JointState& msg);
 };
 
 #endif /* end of include guard */
