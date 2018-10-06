@@ -27,7 +27,7 @@ TwistJogger::TwistJogger()
 {
     std::string in_topic, out_topic, js_topic;
     pnh_.param("topic/twist", in_topic, std::string{"cmd_delta"});
-    pnh_.param("topic/joint_state", js_topic, std::string{"joint_states"});
+    pnh_.param("topic/joint_states", js_topic, std::string{"joint_states"});
     pnh_.param("topic/trajectory", out_topic, std::string{"controller/command"});
     pnh_.param("move_group_name", move_group_name_, std::string{"move_group"});
     pnh_.param("base_frame_id", base_frame_id_, std::string{"base_link"});
