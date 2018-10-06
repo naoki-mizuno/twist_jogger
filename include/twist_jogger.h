@@ -180,13 +180,13 @@ private:
      * This is done using the /compute_fk service.
      *
      * @param joints the current joint state of the robot
-     * @param tgt_frame_id the frame of the end-effector
+     * @param tgt_link_name the frame of the end-effector
      * @return the pose of the end-effector in the cartesian coordinate
      */
     std::tuple<geometry_msgs::PoseStamped, bool>
     compute_fk(const sensor_msgs::JointState& joints,
                const std::string& fixed_frame_id,
-               const std::string& tgt_frame_id);
+               const std::string& tgt_link_name);
 
     /**
      * Computes the inverse kinematics of a given pose
@@ -197,7 +197,7 @@ private:
     std::tuple<sensor_msgs::JointState, bool>
     compute_ik(const geometry_msgs::PoseStamped& pose,
                    const sensor_msgs::JointState& joints_curr,
-                   const std::string& tgt_frame_id);
+                   const std::string& tgt_link_name);
 
     /**
      * Calculates the next pose of the end-effector

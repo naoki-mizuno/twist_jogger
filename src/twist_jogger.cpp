@@ -167,12 +167,12 @@ TwistJogger::get_next_joint_state(const geometry_msgs::TwistStamped& twist) {
 std::tuple<geometry_msgs::PoseStamped, bool>
 TwistJogger::compute_fk(const sensor_msgs::JointState& joints,
                         const std::string& fixed_frame_id,
-                        const std::string& tgt_frame_id) {
+                        const std::string& tgt_link_name) {
     auto fk = moveit_msgs::GetPositionFK{};
     fk.request.header.frame_id = fixed_frame_id;
     fk.request.header.stamp = ros::Time::now();
     fk.request.fk_link_names.clear();
-    fk.request.fk_link_names.push_back(tgt_frame_id);
+    fk.request.fk_link_names.push_back(tgt_link_name);
     fk.request.robot_state.joint_state = joints;
 
     auto success = srv_fk_.call(fk);
@@ -185,12 +185,12 @@ TwistJogger::compute_fk(const sensor_msgs::JointState& joints,
 std::tuple<sensor_msgs::JointState, bool>
 TwistJogger::compute_ik(const geometry_msgs::PoseStamped& pose,
                         const sensor_msgs::JointState& joints_curr,
-                        const std::string& tgt_frame_id) {
+                        const std::string& tgt_link_name) {
     auto ik = moveit_msgs::GetPositionIK{};
     auto& req = ik.request.ik_request;
     req.robot_state.joint_state = joints_curr;
     req.pose_stamped = pose;
-    req.ik_link_name = tgt_frame_id;
+    req.ik_link_name = tgt_link_name;
     req.group_name = move_group_name_;
 
     auto success = srv_ik_.call(ik);
