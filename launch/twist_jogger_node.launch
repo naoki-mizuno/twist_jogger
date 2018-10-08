@@ -1,11 +1,5 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="ROBOT" default="doppel" />
-
-  <include file="$(find doppel_description)/launch/robot.launch" >
-    <arg name="ROBOT" value="$(arg ROBOT)" />
-  </include>
-
   <node pkg="twist_jogger" type="twist_jogger_node" name="twist_jogger" output="screen" >
     <rosparam command="load" file="$(find twist_jogger)/config/params.yaml" />
   </node>

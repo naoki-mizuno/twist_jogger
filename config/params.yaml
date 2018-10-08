@@ -1,11 +1,11 @@
 topic:
   # Input
-  twist: $(arg ROBOT)/cmd_delta
-  joint_states: $(arg ROBOT)/joint_states
+  twist: cmd_delta
+  joint_states: joint_states
   # Output
-  trajectory: $(arg ROBOT)/controller/command
+  trajectory: controller/command
 move_group_name: arm
-base_frame_id: $(arg ROBOT)/base_link
+base_frame_id: base_link
 ee_link_name: hand_camera
 # Discard velocity field in JointState
 discard_velocity: true
