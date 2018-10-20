@@ -3,17 +3,14 @@
 
 #include <ros/ros.h>
 #include <tf2/exceptions.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <std_msgs/Float64.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <trajectory_msgs/JointTrajectory.h>
 #include <trajectory_msgs/JointTrajectoryPoint.h>
 #include <sensor_msgs/JointState.h>
-#include <std_srvs/Trigger.h>
-
-#include <Eigen/Eigenvalues>
 
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -23,14 +20,20 @@
 #include <moveit_msgs/GetPositionFK.h>
 #include <moveit_msgs/GetPositionIK.h>
 
+#include <kdl/tree.hpp>
+#include <kdl_parser/kdl_parser.hpp>
+#include <robot_state_publisher/robot_state_publisher.h>
+
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 
 class TwistJogger {
 public:
-    using Vector6d = Eigen::Matrix<double, 6, 1>;
     using MoveGroupInterface = moveit::planning_interface::MoveGroupInterface;
+
+    const std::string IDEAL_TF_PREFIX = "ideal";
 
     TwistJogger();
 
@@ -63,6 +66,7 @@ private:
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
+    tf2_ros::StaticTransformBroadcaster tf_static_;
 
     ros::Subscriber sub_twist_;
 
@@ -81,6 +85,12 @@ private:
     const robot_state::JointModelGroup* joint_model_group_;
 
     robot_model_loader::RobotModelLoader model_loader_;
+
+    /**
+     * Publish the ideal robot state
+     */
+    KDL::Tree robot_description_;
+    std::shared_ptr<robot_state_publisher::RobotStatePublisher> ideal_rsp_;
 
     /*
      * Current internal joint states
@@ -210,6 +220,9 @@ private:
                     const geometry_msgs::TwistStamped& twist,
                     const double dt);
 
+    void
+    publish_ideal_pose(const sensor_msgs::JointState& ideal_joints);
+
     /**
      * Resets the internal JointState to the given JointState message
      */
@@ -228,6 +241,10 @@ private:
      */
     sensor_msgs::JointState
     filter_joint_state(const sensor_msgs::JointState& msg);
+
+    geometry_msgs::TwistStamped
+    transform_twist(const geometry_msgs::TwistStamped& twist,
+                    const std::string& frame_id);
 };
 
 #endif /* end of include guard */

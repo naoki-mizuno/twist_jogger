@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2
   tf2_ros
   tf2_geometry_msgs
+  robot_state_publisher
   moveit_ros_manipulation
   moveit_ros_move_group
   moveit_ros_planning_interface
