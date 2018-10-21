@@ -319,7 +319,7 @@ TwistJogger::publish_ideal_pose(const sensor_msgs::JointState& ideal_joints) {
     }
     const auto ideal_tf_prefix = append_prefix(tf_prefix_, IDEAL_TF_PREFIX);
     ideal_rsp_->publishTransforms(joint_values,
-                                  ros::Time::now(),
+                                  ros::Time::now() + ros::Duration{0.5},
                                   ideal_tf_prefix);
     ideal_rsp_->publishFixedTransforms(ideal_tf_prefix, false);
 }
