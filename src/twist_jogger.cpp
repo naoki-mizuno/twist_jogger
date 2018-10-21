@@ -16,7 +16,7 @@ TwistJogger::TwistJogger()
     , joints_curr_{}
     , latest_twist_mutex_{}
     , latest_twist_{}
-    , base_frame_id_{}
+    , base_link_name{}
     , ee_link_name_{}
     , publish_rate_{0}
     , trajectory_duration_{0}
@@ -30,7 +30,8 @@ TwistJogger::TwistJogger()
     pnh_.param("topic/joint_states", js_topic, std::string{"joint_states"});
     pnh_.param("topic/trajectory", out_topic, std::string{"controller/command"});
     pnh_.param("move_group_name", move_group_name_, std::string{"move_group"});
-    pnh_.param("base_frame_id", base_frame_id_, std::string{"base_link"});
+    pnh_.param("tf_prefix", tf_prefix_, std::string{""});
+    pnh_.param("base_link_name", base_link_name, std::string{"base_link"});
     pnh_.param("ee_link_name", ee_link_name_, std::string{"ee_link"});
     pnh_.param("publish_rate", publish_rate_, 100.0);
     pnh_.param("trajectory_duration", trajectory_duration_, 0.1);
@@ -66,11 +67,21 @@ TwistJogger::TwistJogger()
     srv_ik_ = nh_.serviceClient<moveit_msgs::GetPositionIK>("compute_ik");
 
     // Actual joint state to ideal joint state
-    geometry_msgs::TransformStamped actual_to_ideal;
-    actual_to_ideal.header.frame_id = base_frame_id_;
-    actual_to_ideal.child_frame_id = IDEAL_TF_PREFIX + "/" + base_frame_id_;
-    actual_to_ideal.transform.rotation.w = 1;
-    tf_static_.sendTransform(actual_to_ideal);
+    const auto& root_joint = arm_model->getRootJoint();
+    // Example: world
+    auto root_link = root_joint->getChildLinkModel()->getName();
+    // Example: erista/world
+    auto actual_base_frame_id = append_prefix(tf_prefix_, root_link);
+    // Example: ideal/world
+    auto ideal_base_frame_id = append_prefix(IDEAL_TF_PREFIX, root_link);
+    // Example: erista/ideal/world
+    ideal_base_frame_id = append_prefix(tf_prefix_, ideal_base_frame_id);
+
+    auto tform = geometry_msgs::TransformStamped{};
+    tform.header.frame_id = actual_base_frame_id;
+    tform.child_frame_id = ideal_base_frame_id;
+    tform.transform.rotation.w = 1;
+    tf_static_.sendTransform(tform);
 }
 
 void
@@ -123,7 +134,7 @@ TwistJogger::spin() {
 
         // Pack them into a JointTrajectory message
         trajectory_msgs::JointTrajectory jt;
-        jt.header.frame_id = base_frame_id_;
+        jt.header.frame_id = append_prefix(tf_prefix_, base_link_name);
         jt.joint_names = joints_next.name;
         trajectory_msgs::JointTrajectoryPoint point;
         point.positions = joints_next.position;
@@ -149,8 +160,10 @@ TwistJogger::get_next_joint_state(const geometry_msgs::TwistStamped& twist) {
     // Compute the current pose of the end-effector (in the base frame)
     geometry_msgs::PoseStamped curr_pose;
     bool success;
+    const std::string base_frame_id = append_prefix(tf_prefix_,
+                                                    base_link_name);
     std::tie(curr_pose, success) = compute_fk(joints_curr,
-                                              base_frame_id_,
+                                              base_frame_id,
                                               ee_link_name_);
     if (!success) {
         ROS_ERROR_STREAM("Failed to compute FK");
@@ -161,11 +174,9 @@ TwistJogger::get_next_joint_state(const geometry_msgs::TwistStamped& twist) {
     auto tgt_pose  = get_target_pose(curr_pose,
                                      twist,
                                      trajectory_duration_);
-    // Note: Need to fill in the frame_id; otherwise NO_IK error from MoveIt!
-    // TODO: Really?
-    latest_joint_state_.header.frame_id = base_frame_id_;
+    tgt_pose.header.frame_id = base_frame_id;
     std::tie(joints_next, success) = compute_ik(tgt_pose,
-                                                latest_joint_state_,
+                                                joints_curr,
                                                 ee_link_name_);
     if (!success) {
         ROS_ERROR_STREAM("Failed to compute IK");
@@ -224,12 +235,17 @@ geometry_msgs::PoseStamped
 TwistJogger::get_target_pose(const geometry_msgs::PoseStamped& curr_pose,
                              const geometry_msgs::TwistStamped& twist,
                              const double dt) {
-    const std::string actual_fixed_frame = curr_pose.header.frame_id;
-    const std::string actual_ee_frame = ee_link_name_;
-    // TODO: Find a better way to encapsulate the Tf tree
-    const std::string prefix = IDEAL_TF_PREFIX + "/";
-    const std::string ideal_fixed_frame = prefix + actual_fixed_frame;
-    const std::string ideal_ee_frame = prefix + actual_ee_frame;
+    // TODO: Use curr_pose.header.frame_id
+    const std::string actual_fixed_frame = append_prefix(tf_prefix_,
+                                                         base_link_name);
+    const std::string actual_ee_frame = append_prefix(tf_prefix_,
+                                                      ee_link_name_);
+    const std::string ideal_prefix = append_prefix(tf_prefix_,
+                                                   IDEAL_TF_PREFIX);
+    const std::string ideal_fixed_frame = append_prefix(ideal_prefix,
+                                                        base_link_name);
+    const std::string ideal_ee_frame = append_prefix(ideal_prefix,
+                                                     ee_link_name_);
 
     auto can_transform_ideal = tf_buffer_.canTransform(ideal_fixed_frame,
                                                        ideal_ee_frame,
@@ -238,8 +254,8 @@ TwistJogger::get_target_pose(const geometry_msgs::PoseStamped& curr_pose,
                                                         actual_ee_frame,
                                                         ros::Time{0});
 
-    std::string fixed_frame;
     auto ee_twist = twist;
+    std::string fixed_frame;
     if (can_transform_ideal) {
         ee_twist.header.frame_id = ideal_ee_frame;
         fixed_frame = ideal_fixed_frame;
@@ -249,10 +265,11 @@ TwistJogger::get_target_pose(const geometry_msgs::PoseStamped& curr_pose,
         fixed_frame = actual_fixed_frame;
     }
     else {
+        ROS_WARN_STREAM("No transform between twist frame and ee frame");
         return curr_pose;
     }
     // EE command in the curr_pose frame, so that twist can be added
-    ee_twist = transform_twist(twist, fixed_frame);
+    ee_twist = transform_twist(ee_twist, fixed_frame);
 
     auto tgt_pose = curr_pose;
 
@@ -295,9 +312,11 @@ TwistJogger::publish_ideal_pose(const sensor_msgs::JointState& ideal_joints) {
         const auto joint_val = ideal_joints.position[i];
         joint_values[name] = joint_val;
     }
+    const auto ideal_tf_prefix = append_prefix(tf_prefix_, IDEAL_TF_PREFIX);
     ideal_rsp_->publishTransforms(joint_values,
                                   ros::Time::now(),
-                                  IDEAL_TF_PREFIX);
+                                  ideal_tf_prefix);
+    ideal_rsp_->publishFixedTransforms(ideal_tf_prefix, false);
 }
 
 bool
@@ -408,4 +427,28 @@ TwistJogger::transform_twist(const geometry_msgs::TwistStamped& twist,
     new_twist.twist.linear = new_lin.vector;
     new_twist.twist.angular = new_ang.vector;
     return new_twist;
+}
+
+std::string
+TwistJogger::append_prefix(const std::string& prefix,
+                           const std::string& frame_id) {
+    if (prefix.empty()) {
+        return frame_id;
+    }
+    auto p = prefix;
+    auto f = frame_id;
+    // Strip all leading and trailing slashes
+    if (p.front() == '/') {
+        p = p.substr(1);
+    }
+    if (p.back() == '/') {
+        p = p.substr(0, p.size() - 1);
+    }
+    if (f.front() == '/') {
+        f = f.substr(1);
+    }
+    if (f.back() == '/') {
+        f = f.substr(0, f.size() - 1);
+    }
+    return p + "/" + f;
 }

@@ -5,7 +5,8 @@ topic:
   # Output
   trajectory: controller/command
 move_group_name: arm
-base_frame_id: base_link
+tf_prefix: ''
+base_link_name: base_link
 ee_link_name: hand_camera
 # Discard velocity field in JointState
 discard_velocity: true

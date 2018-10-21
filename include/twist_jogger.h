@@ -64,6 +64,7 @@ private:
     /* Private node handle */
     ros::NodeHandle pnh_;
 
+    std::string tf_prefix_;
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
     tf2_ros::StaticTransformBroadcaster tf_static_;
@@ -123,7 +124,7 @@ private:
     /**
      * frame_id to be used for the output JointTrajectory message
      */
-    std::string base_frame_id_;
+    std::string base_link_name;
 
     /**
      * Name of the end-effector (the link to move)
@@ -245,6 +246,9 @@ private:
     geometry_msgs::TwistStamped
     transform_twist(const geometry_msgs::TwistStamped& twist,
                     const std::string& frame_id);
+
+    std::string
+    append_prefix(const std::string& prefix, const std::string& frame_id);
 };
 
 #endif /* end of include guard */
