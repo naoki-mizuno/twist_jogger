@@ -166,7 +166,7 @@ TwistJogger::get_next_joint_state(const geometry_msgs::TwistStamped& twist) {
                                               base_frame_id,
                                               ee_link_name_);
     if (!success) {
-        ROS_ERROR_STREAM("Failed to compute FK");
+        ROS_ERROR_STREAM_THROTTLE(2, "Failed to compute FK");
         return sensor_msgs::JointState{};
     }
 
@@ -179,7 +179,7 @@ TwistJogger::get_next_joint_state(const geometry_msgs::TwistStamped& twist) {
                                                 joints_curr,
                                                 ee_link_name_);
     if (!success) {
-        ROS_ERROR_STREAM("Failed to compute IK");
+        ROS_ERROR_STREAM_THROTTLE(2, "Failed to compute IK");
         return sensor_msgs::JointState{};
     }
 
@@ -265,7 +265,12 @@ TwistJogger::get_target_pose(const geometry_msgs::PoseStamped& curr_pose,
         fixed_frame = actual_fixed_frame;
     }
     else {
-        ROS_WARN_STREAM("No transform between twist frame and ee frame");
+        std::string msg = "Transforms ";
+        msg += actual_fixed_frame + " -> " + actual_ee_frame;
+        msg += " nor ";
+        msg += ideal_fixed_frame + " -> " + ideal_ee_frame;
+        msg += " available. Returning current pose for next pose.";
+        ROS_WARN_STREAM_THROTTLE(2, msg);
         return curr_pose;
     }
     // EE command in the curr_pose frame, so that twist can be added
